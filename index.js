@@ -74,9 +74,8 @@ module.exports.ConnectorClient = class ConnectorClient extends EventEmitter {
                         if (typeof error == "object") {
                             if (typeof error[e.code] == "function")
                                 return resolve(error[e.code](e.data, e));
-                            i
-                            f(typeof error["default"] == "function")
-                            return resolve(error["default"](e.code, e.data, e));
+                            if (typeof error["default"] == "function")
+                                return resolve(error["default"](e.code, e.data, e));
                         } else if (typeof error == "function") {
                             return resolve(error(e.code, e.data, e));
                         }
