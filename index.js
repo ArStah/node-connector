@@ -2,7 +2,6 @@ const net = require("net");
 const EventEmitter = require("events").EventEmitter;
 
 module.exports.ConnectorClient = class ConnectorClient extends EventEmitter {
-
     constructor(key) {
         super();
         this._socket = new net.Socket()
@@ -63,38 +62,35 @@ module.exports.ConnectorClient = class ConnectorClient extends EventEmitter {
             _ID
         }));
         return await new Promise((resolve, reject) => {
-                this._requests[_ID] = (data) => {
-                    try {
-                        if (data.success) {
-                            if (typeof success == "function")
-                                return resolve(success(data.data));
-                            return resolve(data.data);
-                        }
-                        let e = data.error;
-                        if (typeof error == "object") {
-                            if (typeof error[e.code] == "function")
-                                return resolve(error[e.code](e.data, e));
-                            if (typeof error["default"] == "function")
-                                return resolve(error["default"](e.code, e.data, e));
-                        } else if (typeof error == "function") {
-                            return resolve(error(e.code, e.data, e));
-                        }
-                        return reject(e);
+            this._requests[_ID] = (data) => {
+                try {
+                    if (data.success) {
+                        if (typeof success == "function")
+                            return resolve(success(data.data));
+                        return resolve(data.data);
                     }
-                    catch
-                        (e) {
-                        return reject(e);
+                    let e = data.error;
+                    if (typeof error == "object") {
+                        if (typeof error[e.code] == "function")
+                            return resolve(error[e.code](e.data, e));
+                        if (typeof error["default"] == "function")
+                            return resolve(error["default"](e.code, e.data, e));
+                    } else if (typeof error == "function") {
+                        return resolve(error(e.code, e.data, e));
                     }
-                };
-                setTimeout(() => {
-                    reject("__TIMEOUT__");
-                }, timeout | 5000);
-            }
-        )
-            ;
+                    return reject(e);
+                }
+                catch
+                    (e) {
+                    return reject(e);
+                }
+            };
+            setTimeout(() => {
+                reject("__TIMEOUT__");
+            }, timeout | 5000);
+        });
     }
-}
-;
+};
 
 module.exports.ConnectorServer = class ConnectorServer extends EventEmitter {
     constructor(key, handler) {
