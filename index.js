@@ -4,9 +4,16 @@ const EventEmitter = require("events").EventEmitter;
 module.exports.ConnectorClient = class ConnectorClient extends EventEmitter {
     constructor(key) {
         super();
+        this._authorized = false;
+        this._requests = {};
+        this._key = key;
+    }
+
+    async connect(port, address) {
         this._socket = new net.Socket()
-            .on('connect', () => {
-                this._socket.write(key);
+            .connect(port, address, () => {
+                this._socket.write(this._key);
+                this.emit("connect");
             })
             .on('error', err => {
                 this.emit("error", err);
@@ -14,27 +21,25 @@ module.exports.ConnectorClient = class ConnectorClient extends EventEmitter {
             .on('close', () => {
                 this.emit("disconnect");
             });
-        this._authorized = false;
-        this._requests = {};
-        this._key = key;
-    }
-
-    async connect(port, address) {
-        this._socket.connect(port, address);
         this._socket.removeAllListeners("data");
         await new Promise((resolve, reject) => {
             this._socket.on('data', data => {
                 data = JSON.parse(data);
-                if (data.code != "SUCCESS_AUTH")
-                    return;
-                for (let meth of data.methods) {
-                    Object.defineProperty(this, meth, {
-                        value: async (...args) => {
-                            return await this._request(meth, ...args);
-                        }
-                    });
+                if (data.code != "SUCCESS_AUTH") {
+                    this._socket.removeAllListeners();
+                    delete this._socket;
+                    this.emit("error", data.code);
+                    return resolve(data.code);
                 }
-                this.emit("connect");
+                for (let meth of data.methods) {
+                    if (!(meth in this))
+                        Object.defineProperty(this, meth, {
+                            value: async (...args) => {
+                                return await this._request(meth, ...args);
+                            }
+                        });
+                }
+                this.emit("authorize");
                 this._socket.removeAllListeners("data");
                 this._socket.on("data", (data) => {
                     data = JSON.parse(data);
@@ -99,13 +104,13 @@ module.exports.ConnectorServer = class ConnectorServer extends EventEmitter {
         Object.defineProperty(this, "_handler", {value: handler});
         Object.defineProperty(this, "_server", {
             value: net.createServer(socket => {
+                this.emit("newConnection", socket);
                 let sockID = +new Date;
                 this._sockets[sockID] = socket;
                 socket.send = (event, data) => {
                     console.log(event, data);
                     socket.write(JSON.stringify({event, data}));
                 };
-
                 socket.on("data", data => {
                     if (data != key)
                         return socket.write(JSON.stringify({code: "__WRONG_PASSCODE__"}));
@@ -149,11 +154,18 @@ module.exports.ConnectorServer = class ConnectorServer extends EventEmitter {
         });
     }
 
-    launch(port) {
-        this._server.listen(port, () => {
-            this.emit("launch");
+    launch(port, timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            let to = setTimeout(() => {
+                this.emit("launchTimeout");
+                reject();
+            }, timeout);
+            this._server.listen(port, () => {
+                this.emit("launch");
+                clearTimeout(to);
+                return resolve();
+            });
         });
-        return this;
     }
 
     async _handleRequest(params, socket) {

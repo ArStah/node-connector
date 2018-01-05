@@ -68,3 +68,16 @@ it("Catch native error", async () => {
     if (!gotErr)
         throw new Error("Didnt catch an error");
 });
+
+it("Create wrong pass client", () => {
+    Cl = new ConnectorClient("wrong");
+});
+
+it("Connect wrong pass client", async () => {
+    Cl.on("error", (code) => {
+        if(code != "__WRONG_PASSCODE__")
+            throw new Error("Not right error, catched", code);
+    });
+    let result = await Cl.connect(port, "localhost");
+
+});
